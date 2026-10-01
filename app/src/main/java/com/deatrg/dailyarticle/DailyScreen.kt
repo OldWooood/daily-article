@@ -30,6 +30,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -69,36 +70,44 @@ fun DailyScreen(vm: ArticleViewModel = viewModel()) {
         (context as? Activity)?.finish()
     }
 
-    Box(
-        Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .navigationBarsPadding()
+    // 根容器必须提供 background + contentColor，否则默认文字颜色是黑色，
+    // 深色模式下黑字压在深色窗口背景上完全看不见（本次 bug）。
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background,
+        contentColor = MaterialTheme.colorScheme.onBackground,
     ) {
-        when (val s = state) {
-            is UiState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+        Box(
+            Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+        ) {
+            when (val s = state) {
+                is UiState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
 
-            is UiState.Error -> Column(
-                Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(s.msg, textAlign = TextAlign.Center)
-                Spacer(Modifier.height(16.dp))
-                Button(onClick = { if (s.isRandom) vm.loadRandom() else vm.loadDaily() }) {
-                    Text("重试")
+                is UiState.Error -> Column(
+                    Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(s.msg, textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(16.dp))
+                    Button(onClick = { if (s.isRandom) vm.loadRandom() else vm.loadDaily() }) {
+                        Text("重试")
+                    }
                 }
-            }
 
-            is UiState.Done -> ArticleBody(
-                article = s.article,
-                onRandom = vm::loadRandom,
-                onScrolled = vm::onScrolled,
-                restore = vm.scroll.collectAsState().value,
-                randomLoading = vm.randomLoading.collectAsState().value,
-            )
+                is UiState.Done -> ArticleBody(
+                    article = s.article,
+                    onRandom = vm::loadRandom,
+                    onScrolled = vm::onScrolled,
+                    restore = vm.scroll.collectAsState().value,
+                    randomLoading = vm.randomLoading.collectAsState().value,
+                )
+            }
         }
     }
 }
@@ -142,6 +151,7 @@ private fun ArticleBody(
                 Text(
                     article.title,
                     style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onBackground,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -176,6 +186,7 @@ private fun ArticleBody(
                         Text(
                             "　　" + b.text,
                             style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onBackground,
                             lineHeight = MaterialTheme.typography.bodyLarge.lineHeight * 1.6,
                         )
                         Spacer(Modifier.height(10.dp))
