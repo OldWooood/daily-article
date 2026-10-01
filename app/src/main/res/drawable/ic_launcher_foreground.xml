@@ -16,29 +16,27 @@
         android:fillColor="#C8402A"
         android:pathData="M40,30 H68 A10,10 0 0 1 78,40 V68 A10,10 0 0 1 68,78 H40 A10,10 0 0 1 30,68 V40 A10,10 0 0 1 40,30 Z" />
 
-    <!-- 「文」：纸白色，圆头，线宽 5 -->
+    <!-- 「文」：纸白色。点是圆点（非竖笔）且与横拉开距离，否则缩略后像「大」「六」 -->
     <path
-        android:fillColor="#00000000"
-        android:strokeColor="#FDF9F2"
-        android:strokeWidth="5"
-        android:strokeLineCap="round"
-        android:pathData="M54,38 L54,43" />
+        android:fillColor="#FDF9F2"
+        android:pathData="M51,37 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0 Z" />
     <path
         android:fillColor="#00000000"
         android:strokeColor="#FDF9F2"
         android:strokeWidth="5"
         android:strokeLineCap="round"
         android:pathData="M41,48.5 H67" />
+    <!-- 撇捺交叉：起笔左右拉开，交点压到横下约 7 处，与横围出倒三角形 -->
     <path
         android:fillColor="#00000000"
         android:strokeColor="#FDF9F2"
         android:strokeWidth="5"
         android:strokeLineCap="round"
-        android:pathData="M54,48.5 C50,56 45,62 39,68" />
+        android:pathData="M63,48.5 C57,56 45,63 37,70" />
     <path
         android:fillColor="#00000000"
         android:strokeColor="#FDF9F2"
         android:strokeWidth="5"
         android:strokeLineCap="round"
-        android:pathData="M54,48.5 C58,56 63,62 69,68" />
+        android:pathData="M45,48.5 C51,56 63,63 71,70" />
 </vector>
