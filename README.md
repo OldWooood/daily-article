@@ -69,3 +69,7 @@ app/src/main/java/com/deatrg/dailyarticle/
 - 加新源 = 加一个 `ArticleSource` 实现类，不改 ViewModel。
 - 散文网、古诗文必须用桌面 UA：移动 UA 会被 302 到移动站 / 只回占位页（真机实测）。
 - 每日取 `dayOfYear % 池大小`，保证同一天稳定同一篇文章。
+
+## License
+
+MIT，见 [LICENSE](LICENSE)。
