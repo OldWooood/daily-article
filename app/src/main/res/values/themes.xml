@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose 应用自身用 MaterialTheme 控制配色，这里只需要一个无 ActionBar 的窗口主题，
+         让 enableEdgeToEdge() 之前的那一帧也是正确的样子。 -->
+    <style name="Theme.DailyArticle" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">?android:attr/colorBackground</item>
+    </style>
+</resources>

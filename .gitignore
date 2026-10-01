@@ -1,0 +1,18 @@
+*.iml
+.gradle/
+build/
+local.properties
+.idea/
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+
+# Keystore files
+*.jks
+*.keystore
+key.properties
+
+# 本机专用构建参数（含 aapt2 绝对路径）
+gradle-local.properties

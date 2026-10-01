@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 13+ 主题图标（monochrome）：必须是单色，系统会按主题着色。
+  因此这里只画轮廓，用 fillColor="#000000"，不要渐变。
+  行文用「挖空」表达：在单色前提下，靠背景色透出形成文字行。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 纸的外框：只画三条边 + 折角，线条制而非填充，避免主题色下糊成一团 -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M30,26 L63,26 L78,41 L78,82 L30,82 Z M36,32 L36,76 L72,76 L72,45 L61,32 Z" />
+
+    <!-- 文字行 -->
+    <path android:fillColor="#000000" android:pathData="M40,48h28v4h-28z" />
+    <path android:fillColor="#000000" android:pathData="M40,57h28v4h-28z" />
+    <path android:fillColor="#000000" android:pathData="M40,66h28v4h-28z" />
+</vector>
