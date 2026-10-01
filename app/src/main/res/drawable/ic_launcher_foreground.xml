@@ -1,11 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  图标前景：一页文稿。
-  刻意避开"翻开的书"这类烂俗符号 —— 直接画一张纸 + 几行文字，
-  对应"每日一文"的产品本质：每天读一篇。
-
-  全部图形控制在 108dp 画布中央 72dp 的安全区内（自适应图标会被裁成圆形/圆角），
-  因此页面的 x 范围取 30~78，y 范围取 26~82。
+  图标前景：朱砂印章 + 「文」。
+  藏书印是文人传统，与"每日一文"的文学定位同源；朱砂红在桌面上也足够醒目。
+  印章 30~78（48dp），居 108dp 画布中央 72dp 安全区内。
+  「文」用圆头描边手绘：点、横、撇、捺四笔，笔画中心线落在印章视觉中心。
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -13,19 +11,34 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- 纸张主体：顶部带一个小折角，表示"一张纸"而非矩形色块 -->
+    <!-- 印章：圆角方，朱砂红 -->
     <path
-        android:fillColor="#2E2A25"
-        android:pathData="M30,26 L63,26 L78,41 L78,82 L30,82 Z" />
+        android:fillColor="#C8402A"
+        android:pathData="M40,30 H68 A10,10 0 0 1 78,40 V68 A10,10 0 0 1 68,78 H40 A10,10 0 0 1 30,68 V40 A10,10 0 0 1 40,30 Z" />
 
-    <!-- 折角（米色回折，暗示翻页） -->
+    <!-- 「文」：纸白色，圆头，线宽 5 -->
     <path
-        android:fillColor="#F0E7D6"
-        android:pathData="M63,26 L63,41 L78,41 Z" />
-
-    <!-- 正文文字行：长短交错，第 2 行留白模拟段落节奏 -->
-    <path android:fillColor="#F7F2E8" android:pathData="M38,49h32v4h-32z" />
-    <path android:fillColor="#F7F2E8" android:pathData="M38,58h32v4h-32z" />
-    <path android:fillColor="#F7F2E8" android:pathData="M38,67h32v4h-32z" />
-    <path android:fillColor="#F7F2E8" android:pathData="M38,76h20v4h-20z" />
+        android:fillColor="#00000000"
+        android:strokeColor="#FDF9F2"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M54,38 L54,43" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FDF9F2"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M41,48.5 H67" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FDF9F2"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M54,48.5 C50,56 45,62 39,68" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FDF9F2"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M54,48.5 C58,56 63,62 69,68" />
 </vector>

@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  图标背景：暖米色斜向渐变，避免纯色发死。
-  配色与 App 内正文（米白纸面 + 墨色字）保持一致。
+  图标背景：暖宣纸色斜向渐变，衬朱砂印。
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -17,8 +16,8 @@
                 android:endX="108"
                 android:endY="108"
                 android:type="linear">
-                <item android:color="#FCF8F1" android:offset="0" />
-                <item android:color="#EDE1CC" android:offset="1" />
+                <item android:color="#FDF9F0" android:offset="0" />
+                <item android:color="#EFE0C6" android:offset="1" />
             </gradient>
         </aapt:attr>
     </path>
