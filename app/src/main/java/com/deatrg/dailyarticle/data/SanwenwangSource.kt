@@ -1,6 +1,11 @@
 package com.deatrg.dailyarticle.data
 
 import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.runBlocking
 import org.jsoup.Jsoup
 import java.time.LocalDate
 import kotlin.random.Random
@@ -25,32 +30,28 @@ class SanwenwangSource : ArticleSource {
         return detail(pool, Random.nextInt(pool.size))
     }
 
-    /** 3 个分类列表各取约 26 篇，凑 70+ 篇候选池；单分类失败记日志但不影响其他。 */
-    private fun pool(): List<String> {
-        val out = LinkedHashSet<String>()
-        var last: Throwable? = null
-        for (cat in CATEGORIES) {
-            val result = runCatching {
-                val doc = Jsoup.parse(Http.get("$BASE$cat", desktopUa = true, timeoutMs = 10_000), BASE)
-                doc.select("a[href]").forEach {
-                    val href = it.attr("abs:href")
-                    if (href.startsWith("$BASE$cat") && href.endsWith(".html")) out.add(href)
+    /** 3 个分类列表各取约 26 篇，凑 70+ 篇候选池；并行抓取，单分类失败记日志但不影响其他。 */
+    private fun pool(): List<String> = runBlocking {
+        coroutineScope {
+            CATEGORIES.map { cat ->
+                async(Dispatchers.IO) {
+                    runCatching {
+                        val doc = Jsoup.parse(Http.get("$BASE$cat", desktopUa = true, timeoutMs = 10_000), BASE)
+                        doc.select("a[href]").mapNotNull { it.attr("abs:href") }
+                            .filter { it.startsWith("$BASE$cat") && it.endsWith(".html") }
+                    }.onFailure {
+                        Log.w(TAG, "列表页失败: $cat", it)
+                    }.getOrDefault(emptyList())
                 }
-            }
-            result.exceptionOrNull()?.let {
-                Log.w(TAG, "列表页失败: $cat", it)
-                last = it
-            }
+            }.awaitAll().flatten().distinct()
         }
-        // 一个都没抓到且全是请求失败：抛原始异常，别报"列表为空"误导排查
-        if (out.isEmpty() && last != null) throw last!!
-        if (out.isEmpty()) throw IllegalStateException("$name 列表为空")
-        return out.toList()
+    }.also {
+        if (it.isEmpty()) throw ArticleException.EmptyContent(name)
     }
 
     /** 取详情；个别文章下线/改版时顺着池子往下试。 */
     private fun detail(pool: List<String>, startIdx: Int): Article {
-        var last: Throwable = IllegalStateException("$name 没有可用条目")
+        var last: Throwable = ArticleException.ParseError(name, "没有可用条目")
         for (offset in pool.indices) {
             val url = pool[(startIdx + offset) % pool.size]
             val result = runCatching { fetchDetail(url) }
@@ -68,9 +69,9 @@ class SanwenwangSource : ArticleSource {
         val info = page.selectFirst("div.info")
         val author = info?.selectFirst("a")?.text()?.trim().orEmpty()
         val body = page.selectFirst("div.content")
-            ?: throw IllegalStateException("$name 正文容器未找到")
+            ?: throw ArticleException.ParseError(name, "正文容器未找到")
         // 去广告与隐藏 SEO 文案（left:-100000px 的灌水 span），否则混入正文
-        body.select("script, .adcontent, [style*=-100000]").remove()
+        body.select("script, .adcontent, .adsbygoogle, [style*=-100000], .share, .copyright, .tags").remove()
         val blocks = mutableListOf<Block>()
         for (el in body.select("h2, h3, p, img")) {
             when (el.tagName()) {
@@ -89,7 +90,7 @@ class SanwenwangSource : ArticleSource {
                 }
             }
         }
-        if (blocks.none { it is Block.Para }) throw IllegalStateException("$name 正文为空")
+        if (blocks.none { it is Block.Para }) throw ArticleException.EmptyContent(name)
         return Article(title.ifBlank { "散文网" }, author, blocks, name)
     }
 

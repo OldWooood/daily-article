@@ -27,7 +27,7 @@ class ZhihuSource : ArticleSource {
 
     private fun stories(): List<Story> {
         val arr = Http.getJson("$BASE/latest").optJSONArray("stories")
-            ?: throw IllegalStateException("$name 列表字段缺失")
+            ?: throw ArticleException.ParseError(name, "列表字段缺失")
         val out = mutableListOf<Story>()
         for (i in 0 until arr.length()) {
             val o = arr.optJSONObject(i) ?: continue
@@ -42,13 +42,13 @@ class ZhihuSource : ArticleSource {
                 )
             )
         }
-        if (out.isEmpty()) throw IllegalStateException("$name 列表为空")
+        if (out.isEmpty()) throw ArticleException.EmptyContent(name)
         return out
     }
 
     private fun detail(s: Story): Article {
         val body = Http.getJson("$BASE/${s.id}").optString("body")
-        if (body.isBlank()) throw IllegalStateException("$name 正文为空")
+        if (body.isBlank()) throw ArticleException.EmptyContent(name)
         val doc = Jsoup.parseBodyFragment(body, BASE)
 
         val blocks = mutableListOf<Block>()
@@ -73,7 +73,7 @@ class ZhihuSource : ArticleSource {
                     ?.let { blocks.add(Block.Para(it)) }
             }
         }
-        if (blocks.none { it is Block.Para }) throw IllegalStateException("$name 正文为空")
+        if (blocks.none { it is Block.Para }) throw ArticleException.EmptyContent(name)
         return Article(s.title.ifBlank { "知乎日报" }, s.hint, blocks, name)
     }
 

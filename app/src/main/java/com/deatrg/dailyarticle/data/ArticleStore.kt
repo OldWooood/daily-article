@@ -2,32 +2,39 @@ package com.deatrg.dailyarticle.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.deatrg.dailyarticle.data.db.ArticleDao
+import com.deatrg.dailyarticle.data.db.ArticleDatabase
+import com.deatrg.dailyarticle.data.db.ArticleEntity
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDate
 
 /**
- * 本地存储，两类数据：
- *
- * 1. **每日一篇**（daily）—— 同一天永远拿到同一篇，抓取失败时也用它兜底。
- * 2. **上次在读**（lastRead）—— 记住用户最后看的是哪一篇（可能是点过「随机一篇」
- *    之后的任意文章）以及滚动到第几段。退出 App 再进来时回到原处，
- *    而不是把用户弹回当天的「每日一篇」。
+ * 文章存储接口。实现类必须做到线程安全。
  */
-object ArticleStore {
+interface ArticleStore {
+    /** 保存每日文章 */
+    suspend fun saveDaily(ctx: Context, a: Article)
 
-    private const val NAME = "article_store"
+    /** 加载今天的每日文章；不是今天的（或没缓存过）返回 null */
+    suspend fun loadDailyToday(ctx: Context): Article?
 
-    private const val K_DAILY_DATE = "daily_date"
-    private const val K_DAILY = "daily_article"
+    /** 加载最近一次缓存的每日文章（不限日期），兜底用 */
+    suspend fun loadDailyAny(ctx: Context): Article?
 
-    private const val K_LAST_DATE = "last_date"
-    private const val K_LAST_RANDOM = "last_is_random"
-    private const val K_LAST = "last_article"
-    private const val K_SCROLL_INDEX = "scroll_index"
-    private const val K_SCROLL_OFFSET = "scroll_offset"
+    /** 保存上次在读的文章 */
+    suspend fun saveLastRead(ctx: Context, a: Article, isRandom: Boolean)
 
-    /** 恢复出来的状态。 */
+    /** 加载上次在读的文章与阅读位置 */
+    suspend fun loadLastRead(ctx: Context): Restored?
+
+    /** 更新阅读位置 */
+    suspend fun saveScroll(ctx: Context, index: Int, offset: Int)
+
+    /** 清除阅读位置（返回键退出时调用，同步写盘） */
+    fun clearScroll(ctx: Context)
+
+    /** 恢复出来的状态 */
     data class Restored(
         val article: Article,
         val isRandom: Boolean,
@@ -36,80 +43,96 @@ object ArticleStore {
         val scrollIndex: Int,
         val scrollOffset: Int,
     )
+}
 
-    private fun sp(ctx: Context): SharedPreferences =
-        ctx.applicationContext.getSharedPreferences(NAME, Context.MODE_PRIVATE)
+/**
+ * Room 实现：文章数据存 Room，阅读位置存 SharedPreferences（高频小数据）。
+ */
+class RoomArticleStore(context: Context) : ArticleStore {
 
-    private fun today(): String = LocalDate.now().toString()
+    private val appContext = context.applicationContext
+    private val dao: ArticleDao = ArticleDatabase.getInstance(appContext).articleDao()
 
-    // ---------------- 每日一篇 ----------------
+    // 阅读位置仍用 SharedPreferences：高频小数据，apply() 异步写盘更合适
+    private val sp: SharedPreferences =
+        appContext.getSharedPreferences("article_scroll", Context.MODE_PRIVATE)
 
-    fun saveDaily(ctx: Context, a: Article) {
-        sp(ctx).edit()
-            .putString(K_DAILY_DATE, today())
-            .putString(K_DAILY, encode(a))
-            .apply()
+    private val currentArticleId: String?
+        get() = sp.getString(K_CURRENT_ID, null)
+
+    override suspend fun saveDaily(ctx: Context, a: Article) {
+        val entity = a.toEntity(
+            id = "daily_${LocalDate.now()}",
+            isDaily = true,
+            date = LocalDate.now().toString()
+        )
+        dao.insert(entity)
     }
 
-    /** 今天缓存的每日文章；不是今天的（或没缓存过）返回 null。 */
-    fun loadDailyToday(ctx: Context): Article? {
-        val p = sp(ctx)
-        if (p.getString(K_DAILY_DATE, null) != today()) return null
-        return decode(p.getString(K_DAILY, null))
+    override suspend fun loadDailyToday(ctx: Context): Article? {
+        val today = LocalDate.now().toString()
+        return dao.loadDailyByDate(today)?.toArticle()
     }
 
-    /** 最近一次抓到的每日文章（不限日期），抓取彻底失败时兜底。 */
-    fun loadDailyAny(ctx: Context): Article? = decode(sp(ctx).getString(K_DAILY, null))
+    override suspend fun loadDailyAny(ctx: Context): Article? {
+        return dao.loadLatestDaily()?.toArticle()
+    }
 
-    // ---------------- 上次在读 ----------------
-
-    fun saveLastRead(ctx: Context, a: Article, isRandom: Boolean) {
-        sp(ctx).edit()
-            .putString(K_LAST_DATE, today())
+    override suspend fun saveLastRead(ctx: Context, a: Article, isRandom: Boolean) {
+        val id = a.id()
+        sp.edit()
+            .putString(K_CURRENT_ID, id)
+            .putString(K_LAST_DATE, LocalDate.now().toString())
             .putBoolean(K_LAST_RANDOM, isRandom)
-            .putString(K_LAST, encode(a))
             .putInt(K_SCROLL_INDEX, 0)
             .putInt(K_SCROLL_OFFSET, 0)
             .apply()
+        // 同时存入 Room 以便跨天恢复
+        val entity = a.toEntity(
+            id = id,
+            isDaily = false,
+            date = LocalDate.now().toString()
+        )
+        dao.insert(entity)
     }
 
-    /** 读取上次在读的篇目与阅读位置；从来没有读过返回 null。 */
-    fun loadLastRead(ctx: Context): Restored? {
-        val p = sp(ctx)
-        val article = decode(p.getString(K_LAST, null)) ?: return null
-        return Restored(
-            article = article,
-            isRandom = p.getBoolean(K_LAST_RANDOM, false),
-            date = p.getString(K_LAST_DATE, "").orEmpty(),
-            scrollIndex = p.getInt(K_SCROLL_INDEX, 0).coerceAtLeast(0),
-            scrollOffset = p.getInt(K_SCROLL_OFFSET, 0),
+    override suspend fun loadLastRead(ctx: Context): ArticleStore.Restored? {
+        val id = currentArticleId ?: return null
+        val entity = dao.loadById(id) ?: return null
+        return ArticleStore.Restored(
+            article = entity.toArticle(),
+            isRandom = sp.getBoolean(K_LAST_RANDOM, false),
+            date = sp.getString(K_LAST_DATE, "").orEmpty(),
+            scrollIndex = sp.getInt(K_SCROLL_INDEX, 0).coerceAtLeast(0),
+            scrollOffset = sp.getInt(K_SCROLL_OFFSET, 0),
         )
     }
 
-    /** 单独更新阅读位置（滚动时高频调用）。 */
-    fun saveScroll(ctx: Context, index: Int, offset: Int) {
-        sp(ctx).edit()
+    override suspend fun saveScroll(ctx: Context, index: Int, offset: Int) {
+        val id = currentArticleId ?: return
+        sp.edit()
             .putInt(K_SCROLL_INDEX, index.coerceAtLeast(0))
             .putInt(K_SCROLL_OFFSET, offset)
             .apply()
+        dao.updateScroll(id, index.coerceAtLeast(0), offset)
     }
 
-    /**
-     * 用户按返回键退出时调用：把阅读位置清零，下次进来回到文章顶部。
-     * 必须用同步 commit：Activity 即将销毁，apply 的异步写盘可能丢失。
-     */
-    fun clearScroll(ctx: Context) {
-        sp(ctx).edit()
+    override fun clearScroll(ctx: Context) {
+        val id = currentArticleId
+        sp.edit()
             .putInt(K_SCROLL_INDEX, 0)
             .putInt(K_SCROLL_OFFSET, 0)
-            .commit()
+            .commit() // 同步写盘
+        id?.let { dao.clearScroll(it) }
     }
 
-    // ---------------- 编解码 ----------------
+    // ---------------- 转换 ----------------
 
-    private fun encode(a: Article): String {
+    private fun Article.id(): String = "article_${title.hashCode()}_${blocks.size}"
+
+    private fun Article.toEntity(id: String, isDaily: Boolean, date: String): ArticleEntity {
         val arr = JSONArray()
-        for (b in a.blocks) {
+        for (b in blocks) {
             when (b) {
                 is Block.Para -> arr.put(JSONObject().put("t", "p").put("c", b.text))
                 is Block.Subhead -> arr.put(JSONObject().put("t", "s").put("c", b.text))
@@ -118,18 +141,27 @@ object ArticleStore {
                 )
             }
         }
-        return JSONObject()
-            .put("title", a.title)
-            .put("author", a.author)
-            .put("source", a.source)
+        val json = JSONObject()
+            .put("title", title)
+            .put("author", author)
+            .put("source", source)
             .put("blocks", arr)
             .toString()
+        return ArticleEntity(
+            id = id,
+            title = title,
+            author = author,
+            source = source,
+            blocks = json,
+            cachedAt = System.currentTimeMillis(),
+            isDaily = isDaily,
+            date = date
+        )
     }
 
-    private fun decode(raw: String?): Article? {
-        if (raw.isNullOrBlank()) return null
+    private fun ArticleEntity.toArticle(): Article {
         return runCatching {
-            val o = JSONObject(raw)
+            val o = JSONObject(blocks)
             val arr = o.optJSONArray("blocks") ?: JSONArray()
             val blocks = mutableListOf<Block>()
             for (i in 0 until arr.length()) {
@@ -147,6 +179,14 @@ object ArticleStore {
                 blocks = blocks,
                 source = o.optString("source"),
             )
-        }.getOrNull()
+        }.getOrNull() ?: Article(title = title, author = author, blocks = emptyList(), source = source)
+    }
+
+    companion object {
+        private const val K_CURRENT_ID = "current_id"
+        private const val K_LAST_DATE = "last_date"
+        private const val K_LAST_RANDOM = "last_is_random"
+        private const val K_SCROLL_INDEX = "scroll_index"
+        private const val K_SCROLL_OFFSET = "scroll_offset"
     }
 }

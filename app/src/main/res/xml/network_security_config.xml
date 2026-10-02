@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- 默认禁止明文流量，强制 HTTPS -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- ONE·一个 官方接口只提供 HTTP，为其单独放行 -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">v3.wufazhuce.com</domain>
+    </domain-config>
+</network-security-config>

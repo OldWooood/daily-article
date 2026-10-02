@@ -5,25 +5,14 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.deatrg.dailyarticle.data.Article
-import com.deatrg.dailyarticle.data.ArticleSource
-import com.deatrg.dailyarticle.data.ArticleStore
-import com.deatrg.dailyarticle.data.DushuSource
-import com.deatrg.dailyarticle.data.DuwenzhangSource
-import com.deatrg.dailyarticle.data.GushiwenSource
-import com.deatrg.dailyarticle.data.HitokotoSource
-import com.deatrg.dailyarticle.data.OneSource
-import com.deatrg.dailyarticle.data.SanwenwangSource
-import com.deatrg.dailyarticle.data.SeventySecondsSource
-import com.deatrg.dailyarticle.data.SourceChain
-import com.deatrg.dailyarticle.data.ZhihuSource
+import com.deatrg.dailyarticle.data.ArticleRepository
+import com.deatrg.dailyarticle.di.AppModule
 import java.time.LocalDate
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 sealed interface UiState {
     data object Loading : UiState
@@ -36,23 +25,7 @@ data class Scroll(val index: Int, val offset: Int)
 
 class ArticleViewModel(app: Application) : AndroidViewModel(app) {
 
-    /**
-     * 故障转移链，各源均为独立域名，避免一起挂。
-     * 文学散文优先：读书网 → 散文网 → 短文学 → ONE·一个 → 知乎日报 →
-     * 古诗文 → 60秒简报 → 一言短句（永不白屏）。
-     */
-    private val chain = SourceChain(
-        listOf<ArticleSource>(
-            DushuSource(),
-            SanwenwangSource(),
-            DuwenzhangSource(),
-            OneSource(),
-            ZhihuSource(),
-            GushiwenSource(),
-            SeventySecondsSource(),
-            HitokotoSource(),
-        )
-    )
+    private val repository: ArticleRepository = AppModule.provideRepository(app)
 
     private val _state = MutableStateFlow<UiState>(UiState.Loading)
     val state: StateFlow<UiState> = _state.asStateFlow()
@@ -90,7 +63,7 @@ class ArticleViewModel(app: Application) : AndroidViewModel(app) {
     private fun restore() {
         viewModelScope.launch {
             val ctx = getApplication<Application>()
-            val restored = withContext(Dispatchers.IO) { ArticleStore.loadLastRead(ctx) }
+            val restored = repository.loadLastRead(ctx)
             if (restored == null) {
                 load(daily = true)
                 return@launch
@@ -112,7 +85,7 @@ class ArticleViewModel(app: Application) : AndroidViewModel(app) {
 
             if (daily) {
                 // 当天缓存命中直接显示，不请求网络
-                val cached = withContext(Dispatchers.IO) { ArticleStore.loadDailyToday(ctx) }
+                val cached = repository.loadDailyToday(ctx)
                 if (cached != null) {
                     show(cached, isRandom = false)
                     return@launch
@@ -124,22 +97,14 @@ class ArticleViewModel(app: Application) : AndroidViewModel(app) {
             else if (showLoading) _state.value = UiState.Loading
 
             try {
-                val a = withContext(Dispatchers.IO) {
-                    if (daily) chain.daily() else chain.random()
-                }
-                withContext(Dispatchers.IO) {
-                    if (daily) ArticleStore.saveDaily(ctx, a)
-                    ArticleStore.saveLastRead(ctx, a, isRandom = !daily)
-                }
+                val a = if (daily) repository.getDaily(ctx) else repository.getRandom(ctx)
                 show(a, isRandom = !daily)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e // 用户又点了一次，属正常打断
             } catch (e: Exception) {
                 Log.w(TAG, "load(daily=$daily) failed", e)
                 // 兜底顺序：任意一天的每日文章 → 上次在读的文章 → 报错
-                val fallback = withContext(Dispatchers.IO) {
-                    ArticleStore.loadDailyAny(ctx) ?: ArticleStore.loadLastRead(ctx)?.article
-                }
+                val fallback = repository.loadFallback(ctx)
                 if (fallback != null) show(fallback, isRandom = false)
                 else _state.value = UiState.Error("加载失败：${e.message ?: "网络错误"}", isRandom = !daily)
             } finally {
@@ -163,7 +128,7 @@ class ArticleViewModel(app: Application) : AndroidViewModel(app) {
         _scroll.value = next
         val ctx = getApplication<Application>()
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { ArticleStore.saveScroll(ctx, index, offset) }
+            repository.saveScroll(ctx, index, offset)
         }
     }
 
@@ -172,7 +137,7 @@ class ArticleViewModel(app: Application) : AndroidViewModel(app) {
         backPressed = true
         _scroll.value = Scroll(0, 0)
         // 同步清盘，见 ArticleStore.clearScroll 注释
-        ArticleStore.clearScroll(getApplication())
+        repository.clearScroll(getApplication())
     }
 
     private companion object { const val TAG = "DailyArticle" }

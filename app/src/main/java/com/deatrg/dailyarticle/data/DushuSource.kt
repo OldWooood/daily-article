@@ -23,7 +23,7 @@ class DushuSource : ArticleSource {
 
     /** 依次请求各候选入口，第一个解析成功的胜出。 */
     private fun parse(candidates: List<Endpoint>): Article {
-        var last: Throwable = IllegalStateException("$name 没有可用入口")
+        var last: Throwable = ArticleException.NetworkError("$name 没有可用入口")
         for (e in candidates) {
             val result = runCatching { parse(Http.get(e.url, desktopUa = e.desktopUa), e.url) }
             result.onSuccess { return it }
@@ -44,7 +44,7 @@ class DushuSource : ArticleSource {
             ?: page.selectFirst("h1")?.text()?.trim().orEmpty()
         val author = page.selectFirst(".article-info")?.text()?.trim().orEmpty()
         val body: Element = page.selectFirst("div.text")
-            ?: throw IllegalStateException("$name 正文容器未找到")
+            ?: throw ArticleException.ParseError(name, "正文容器未找到")
 
         val blocks = mutableListOf<Block>()
         for (el in body.select("h2, h3, p, img")) {
@@ -68,7 +68,7 @@ class DushuSource : ArticleSource {
             }
         }
         // 抓到页面但正文为空也算解析失败，必须抛异常进备源
-        if (blocks.isEmpty()) throw IllegalStateException("$name 正文为空")
+        if (blocks.isEmpty()) throw ArticleException.EmptyContent(name)
         return Article(title.ifEmpty { "每日一读" }, author, blocks, name)
     }
 

@@ -28,7 +28,7 @@ class HitokotoSource(
     private fun fetch(type: String): Article {
         val o = Http.getJson("https://v1.hitokoto.cn/?c=$type&encode=json")
         val sentence = o.optString("hitokoto").trim()
-        if (sentence.isEmpty()) throw IllegalStateException("$name 返回为空")
+        if (sentence.isEmpty()) throw ArticleException.EmptyContent(name)
         val from = o.optString("from").trim()
         val who = o.optString("from_who").trim()
         val blocks = mutableListOf<Block>(Block.Para(sentence))

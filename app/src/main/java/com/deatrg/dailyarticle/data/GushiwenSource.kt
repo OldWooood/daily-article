@@ -28,12 +28,13 @@ class GushiwenSource : ArticleSource {
 
     /** 诗文列表页的 /shiwenv_xxx.aspx 链接成池（约 10 首，少但稳定）。 */
     private fun pool(): List<String> {
-        // 单点请求，失败重试 3 次（该站 CDN 偶发 5xx）
-        var last: Throwable = IllegalStateException("$name 列表为空")
-        repeat(3) {
+        // 单点请求，失败重试 3 次（该站 CDN 偶发 5xx），指数退避
+        var last: Throwable = ArticleException.NetworkError(LIST)
+        repeat(3) { attempt ->
             val result = runCatching { parsePool() }
             result.onSuccess { return it }
             last = result.exceptionOrNull() ?: last
+            if (attempt < 2) Thread.sleep(1000L * (1L shl attempt))
         }
         throw last
     }
@@ -45,13 +46,13 @@ class GushiwenSource : ArticleSource {
             val href = it.attr("abs:href")
             if ("/shiwenv_" in href && href.endsWith(".aspx")) out.add(href.substringBefore("#"))
         }
-        if (out.isEmpty()) throw IllegalStateException("$name 列表为空")
+        if (out.isEmpty()) throw ArticleException.EmptyContent(name)
         return out.toList()
     }
 
     /** 取详情；个别诗页改版时顺着池子往下试。 */
     private fun detail(pool: List<String>, startIdx: Int): Article {
-        var last: Throwable = IllegalStateException("$name 没有可用条目")
+        var last: Throwable = ArticleException.ParseError(name, "没有可用条目")
         for (offset in pool.indices) {
             val url = pool[(startIdx + offset) % pool.size]
             val result = runCatching { fetchDetail(url) }
@@ -72,7 +73,7 @@ class GushiwenSource : ArticleSource {
             links.getOrNull(1).orEmpty(),
         ).filter { it.isNotEmpty() }.joinToString("")
         val poem = page.selectFirst("div.contson")
-            ?: throw IllegalStateException("$name 正文容器未找到")
+            ?: throw ArticleException.ParseError(name, "正文容器未找到")
         // 原诗以 <br> 分行：按 br 切行，每行一段
         val html = poem.html().replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
         val blocks = Parser.unescapeEntities(html, false)
@@ -80,7 +81,7 @@ class GushiwenSource : ArticleSource {
             .map { it.replace(Regex("<[^>]+>"), "").trim() }
             .filter { it.isNotEmpty() }
             .map { Block.Para(it) }
-        if (blocks.isEmpty()) throw IllegalStateException("$name 正文为空")
+        if (blocks.isEmpty()) throw ArticleException.EmptyContent(name)
         return Article(title.ifBlank { "古诗文" }, author, blocks, name)
     }
 

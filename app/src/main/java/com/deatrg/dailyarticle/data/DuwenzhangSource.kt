@@ -43,13 +43,13 @@ class DuwenzhangSource : ArticleSource {
         }
         // 一个都没抓到且全是请求失败：抛原始异常，别报"列表为空"误导排查
         if (out.isEmpty() && last != null) throw last!!
-        if (out.isEmpty()) throw IllegalStateException("$name 列表为空")
+        if (out.isEmpty()) throw ArticleException.EmptyContent(name)
         return out.toList()
     }
 
     /** 取详情；个别文章删除/改版时顺着池子往下试。 */
     private fun detail(pool: List<String>, startIdx: Int): Article {
-        var last: Throwable = IllegalStateException("$name 没有可用条目")
+        var last: Throwable = ArticleException.ParseError(name, "没有可用条目")
         for (offset in pool.indices) {
             val url = pool[(startIdx + offset) % pool.size]
             val result = runCatching { fetchDetail(url) }
@@ -70,7 +70,7 @@ class DuwenzhangSource : ArticleSource {
                 // 作者缺失时别把"来源：/时间："当成名字
                 .takeUnless { it.contains("：") || it.contains(":") }.orEmpty()
         val body = page.selectFirst("div#wenzhangziti")
-            ?: throw IllegalStateException("$name 正文容器未找到")
+            ?: throw ArticleException.ParseError(name, "正文容器未找到")
         body.select("script").remove()
         val blocks = mutableListOf<Block>()
         // 站内用大写 <P>，Jsoup 会归一成小写，直接选 p 即可
@@ -83,7 +83,7 @@ class DuwenzhangSource : ArticleSource {
                     ?.let { blocks.add(Block.Para(it)) }
             }
         }
-        if (blocks.none { it is Block.Para }) throw IllegalStateException("$name 正文为空")
+        if (blocks.none { it is Block.Para }) throw ArticleException.EmptyContent(name)
         return Article(title.ifBlank { "短文学" }, author, blocks, name)
     }
 

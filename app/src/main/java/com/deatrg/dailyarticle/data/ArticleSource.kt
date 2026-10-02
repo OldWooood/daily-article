@@ -30,7 +30,7 @@ class SourceChain(private val sources: List<ArticleSource>) {
 
     /** 逐个尝试，任一源抛异常就跳到下一个；全部失败才抛出最后一个异常。 */
     private inline fun firstSuccess(block: (ArticleSource) -> Article): Article {
-        var last: Throwable = IllegalStateException("没有可用数据源")
+        var last: Throwable = ArticleException.AllSourcesFailed(emptyList())
         for (s in sources) {
             val result = runCatching { block(s) }
             result.onSuccess {

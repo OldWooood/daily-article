@@ -4,6 +4,7 @@ import java.util.Properties
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose") version "2.2.21"
+    id("com.google.devtools.ksp") version "2.2.21-1.0.28"
 }
 
 // 读取签名配置文件（key.properties 已被 .gitignore 忽略，不进仓库）
@@ -98,6 +99,11 @@ dependencies {
 
     implementation(libs.coil.compose)
     implementation(libs.jsoup)
+    implementation(libs.okhttp)
+
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    ksp(libs.room.compiler)
 
     debugImplementation(libs.androidx.ui.tooling)
     testImplementation(libs.junit)

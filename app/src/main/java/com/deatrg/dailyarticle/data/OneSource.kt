@@ -34,7 +34,7 @@ class OneSource : ArticleSource {
         var cursor = "0"
         repeat(PAGES) {
             val arr = Http.getJson("$LIST_BASE/more/$cursor").optJSONArray("data")
-                ?: throw IllegalStateException("$name 列表字段缺失")
+                ?: throw ArticleException.ParseError(name, "列表字段缺失")
             if (arr.length() == 0) return@repeat
             for (i in 0 until arr.length()) {
                 val o = arr.optJSONObject(i) ?: continue
@@ -52,7 +52,7 @@ class OneSource : ArticleSource {
             cursor = arr.optJSONObject(arr.length() - 1)?.optString("id").orEmpty()
                 .ifBlank { cursor }
         }
-        if (out.isEmpty()) throw IllegalStateException("$name 列表为空")
+        if (out.isEmpty()) throw ArticleException.EmptyContent(name)
         return out
     }
 
@@ -61,7 +61,7 @@ class OneSource : ArticleSource {
      * 这时顺着候选池往下试，而不是让整个源失败。
      */
     private fun essay(pool: List<Item>, startIdx: Int): Article {
-        var last: Throwable = IllegalStateException("$name 没有可用条目")
+        var last: Throwable = ArticleException.ParseError(name, "没有可用条目")
         for (offset in pool.indices) {
             val item = pool[(startIdx + offset) % pool.size]
             val result = runCatching { fetchEssay(item) }
@@ -73,7 +73,7 @@ class OneSource : ArticleSource {
 
     private fun fetchEssay(item: Item): Article {
         val d = Http.getJson("$ESSAY_BASE/${item.id}").optJSONObject("data")
-            ?: throw IllegalStateException("$name 详情字段缺失: ${item.id}")
+            ?: throw ArticleException.ParseError(name, "详情字段缺失: ${item.id}")
         val title = d.optString("hp_title").ifBlank { item.title }.ifBlank { "ONE·一个" }
         val author = d.optString("hp_author").ifBlank { item.author }
         val content = d.optString("hp_content")
@@ -96,7 +96,7 @@ class OneSource : ArticleSource {
         } else {
             paras.forEach { blocks.add(Block.Para(it)) }
         }
-        if (blocks.isEmpty()) throw IllegalStateException("$name 正文为空")
+        if (blocks.isEmpty()) throw ArticleException.EmptyContent(name)
         return Article(title, author, blocks, name)
     }
 
