@@ -14,13 +14,13 @@ class ZhihuSource : ArticleSource {
 
     private data class Story(val id: String, val title: String, val hint: String)
 
-    override fun fetchDaily(): Article {
+    override suspend fun fetchDaily(): Article {
         val list = stories()
         val idx = Math.floorMod(LocalDate.now().dayOfYear, list.size)
         return detail(list[idx])
     }
 
-    override fun fetchRandom(): Article {
+    override suspend fun fetchRandom(): Article {
         val list = stories()
         return detail(list[Random.nextInt(list.size)])
     }

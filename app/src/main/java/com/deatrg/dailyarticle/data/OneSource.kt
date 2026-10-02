@@ -16,14 +16,14 @@ class OneSource : ArticleSource {
 
     private data class Item(val id: String, val title: String, val author: String)
 
-    override fun fetchDaily(): Article {
+    override suspend fun fetchDaily(): Article {
         val pool = pool()
         // 按 dayOfYear 取模，同一天命中同一篇
         val idx = Math.floorMod(LocalDate.now().dayOfYear, pool.size)
         return essay(pool, idx)
     }
 
-    override fun fetchRandom(): Article {
+    override suspend fun fetchRandom(): Article {
         val pool = pool()
         return essay(pool, Random.nextInt(pool.size))
     }

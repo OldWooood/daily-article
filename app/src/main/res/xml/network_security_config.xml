@@ -11,4 +11,12 @@
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">v3.wufazhuce.com</domain>
     </domain-config>
+
+    <!-- debug 包允许用户 CA（Charles/Fiddler 抓包），release 不受影响 -->
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="user" />
+            <certificates src="system" />
+        </trust-anchors>
+    </debug-overrides>
 </network-security-config>

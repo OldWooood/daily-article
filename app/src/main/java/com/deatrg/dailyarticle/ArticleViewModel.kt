@@ -68,8 +68,9 @@ class ArticleViewModel(app: Application) : AndroidViewModel(app) {
                 load(daily = true)
                 return@launch
             }
-            show(restored.article, restored.isRandom)
-            _scroll.value = Scroll(restored.scrollIndex, restored.scrollOffset)
+            // 先设位置再发 Done：UI 的 LaunchedEffect(article) 读到的是恢复后的位置，
+            // 否则 Done 先发、位置后到，恢复会被漏掉回到顶部。
+            show(restored.article, restored.isRandom, Scroll(restored.scrollIndex, restored.scrollOffset))
             // 只有「每日一篇」且已经跨天了才需要刷新；
             // 随机文章永远保持原样，否则会丢失用户正在读的内容。
             if (!restored.isRandom && restored.date != LocalDate.now().toString()) {
@@ -113,10 +114,10 @@ class ArticleViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 显示一篇文章，并把阅读位置重置到顶部。 */
-    private fun show(a: Article, isRandom: Boolean) {
+    /** 显示一篇文章，并把阅读位置重置到顶部（恢复场景可传入保存的位置）。 */
+    private fun show(a: Article, isRandom: Boolean, scroll: Scroll = Scroll(0, 0)) {
         backPressed = false
-        _scroll.value = Scroll(0, 0)
+        _scroll.value = scroll
         _state.value = UiState.Done(a, isRandom)
     }
 
@@ -136,8 +137,10 @@ class ArticleViewModel(app: Application) : AndroidViewModel(app) {
     fun onBackPressed() {
         backPressed = true
         _scroll.value = Scroll(0, 0)
-        // 同步清盘，见 ArticleStore.clearScroll 注释
-        repository.clearScroll(getApplication())
+        val ctx = getApplication<Application>()
+        // SP 部分在 store 内同步 commit，DB 备份异步写；位置真相来源是 SP，
+        // 所以即使 Activity 紧接着 finish，下次进来也是顶部。
+        viewModelScope.launch { repository.clearScroll(ctx) }
     }
 
     private companion object { const val TAG = "DailyArticle" }

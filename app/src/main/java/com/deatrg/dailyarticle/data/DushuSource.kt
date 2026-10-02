@@ -17,9 +17,9 @@ class DushuSource : ArticleSource {
      * 会因「Trust anchor for certification path not found」握手失败。
      * 因此按 [HOSTS] 顺序依次尝试：先桌面 UA 拿 www 站，再退到 m 站（移动 UA）。
      */
-    override fun fetchDaily(): Article = parse(CANDIDATES_DAILY)
+    override suspend fun fetchDaily(): Article = parse(CANDIDATES_DAILY)
 
-    override fun fetchRandom(): Article = parse(CANDIDATES_RANDOM)
+    override suspend fun fetchRandom(): Article = parse(CANDIDATES_RANDOM)
 
     /** 依次请求各候选入口，第一个解析成功的胜出。 */
     private fun parse(candidates: List<Endpoint>): Article {

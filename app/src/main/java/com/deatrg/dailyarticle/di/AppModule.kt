@@ -8,7 +8,7 @@ import com.deatrg.dailyarticle.data.DushuSource
 import com.deatrg.dailyarticle.data.GushiwenSource
 import com.deatrg.dailyarticle.data.HitokotoSource
 import com.deatrg.dailyarticle.data.OneSource
-import com.deatrg.dailyarticle.data.RoomArticleStore
+import com.deatrg.dailyarticle.data.SqliteArticleStore
 import com.deatrg.dailyarticle.data.SanwenwangSource
 import com.deatrg.dailyarticle.data.SeventySecondsSource
 import com.deatrg.dailyarticle.data.SourceChain
@@ -20,6 +20,7 @@ import com.deatrg.dailyarticle.data.ZhihuSource
  */
 object AppModule {
 
+    @Volatile
     private var repository: ArticleRepository? = null
 
     fun provideRepository(context: Context): ArticleRepository {
@@ -29,7 +30,7 @@ object AppModule {
     }
 
     private fun createRepository(context: Context): ArticleRepository {
-        val store = RoomArticleStore(context)
+        val store: ArticleStore = SqliteArticleStore(context)
 
         val chain = SourceChain(
             listOf(

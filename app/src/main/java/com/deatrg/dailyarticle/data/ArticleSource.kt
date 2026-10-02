@@ -5,16 +5,19 @@ import android.util.Log
 /**
  * 文章源统一接口。实现类必须做到：抓不到内容就抛异常，绝不返回空文章，
  * 这样 [SourceChain] 才能正确切到下一个备源（永不白屏）。
+ *
+ * 所有实现都是 suspend：上层统一在 Dispatchers.IO 调用，内部可用
+ * coroutineScope/async 做并行（如散文网多分类列表页）。
  */
 interface ArticleSource {
     /** 域名，用于日志与页脚标注 */
     val name: String
 
     /** 当天的文章。同一自然日应稳定返回同一篇。 */
-    fun fetchDaily(): Article
+    suspend fun fetchDaily(): Article
 
     /** 随机一篇文章。 */
-    fun fetchRandom(): Article
+    suspend fun fetchRandom(): Article
 }
 
 /**
@@ -23,14 +26,14 @@ interface ArticleSource {
  */
 class SourceChain(private val sources: List<ArticleSource>) {
 
-    /** 依次尝试 daily，返回首个成功结果；全失败则抛最后一个异常。 */
-    fun daily(): Article = firstSuccess { it.fetchDaily() }
+    /** 依次尝试 daily，返回首个成功结果；全失败则抛全部异常汇总。 */
+    suspend fun daily(): Article = firstSuccess { it.fetchDaily() }
 
-    fun random(): Article = firstSuccess { it.fetchRandom() }
+    suspend fun random(): Article = firstSuccess { it.fetchRandom() }
 
-    /** 逐个尝试，任一源抛异常就跳到下一个；全部失败才抛出最后一个异常。 */
-    private inline fun firstSuccess(block: (ArticleSource) -> Article): Article {
-        var last: Throwable = ArticleException.AllSourcesFailed(emptyList())
+    /** 逐个尝试，任一源抛异常就跳到下一个；全部失败才抛出汇总异常。 */
+    private suspend inline fun firstSuccess(crossinline block: suspend (ArticleSource) -> Article): Article {
+        val errors = mutableListOf<Throwable>()
         for (s in sources) {
             val result = runCatching { block(s) }
             result.onSuccess {
@@ -38,11 +41,13 @@ class SourceChain(private val sources: List<ArticleSource>) {
                 return it
             }
             // 关键：不能静默吞掉，否则主源常年失效也看不出来
-            Log.w(TAG, "数据源失败: ${s.name}", result.exceptionOrNull())
-            last = result.exceptionOrNull() ?: last
+            val e = result.exceptionOrNull()
+            Log.w(TAG, "数据源失败: ${s.name}", e)
+            if (e != null) errors.add(e)
         }
-        Log.e(TAG, "全部数据源均失败", last)
-        throw last
+        val failed = ArticleException.AllSourcesFailed(errors.toList())
+        Log.e(TAG, "全部数据源均失败", failed)
+        throw failed
     }
 
     private companion object { const val TAG = "DailyArticle" }

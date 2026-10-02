@@ -14,12 +14,12 @@ class DuwenzhangSource : ArticleSource {
 
     override val name = "duwenzhang.com"
 
-    override fun fetchDaily(): Article {
+    override suspend fun fetchDaily(): Article {
         val pool = pool()
         return detail(pool, Math.floorMod(LocalDate.now().dayOfYear, pool.size))
     }
 
-    override fun fetchRandom(): Article {
+    override suspend fun fetchRandom(): Article {
         val pool = pool()
         return detail(pool, Random.nextInt(pool.size))
     }

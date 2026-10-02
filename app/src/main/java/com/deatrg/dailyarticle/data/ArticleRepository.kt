@@ -13,7 +13,11 @@ class ArticleRepository(
     private val chain: SourceChain
 ) {
 
-    /** 获取每日文章：优先缓存，否则走源链 */
+    /**
+     * 获取每日文章：优先缓存，否则走源链。
+     * ViewModel 在调用前已做一次 loadDailyToday 快检（避免缓存命中时闪 Loading），
+     * 这里再查一次是防并调用的二次确认，两次都是索引主键查询，开销可忽略。
+     */
     suspend fun getDaily(ctx: Context): Article = withContext(Dispatchers.IO) {
         // 1. 今天缓存命中
         store.loadDailyToday(ctx)?.let { return@withContext it }
@@ -49,8 +53,8 @@ class ArticleRepository(
     suspend fun saveScroll(ctx: Context, index: Int, offset: Int) =
         withContext(Dispatchers.IO) { store.saveScroll(ctx, index, offset) }
 
-    /** 清除阅读位置（同步写盘） */
-    fun clearScroll(ctx: Context) = store.clearScroll(ctx)
+    /** 清除阅读位置（挂起写，SP 部分同步落盘） */
+    suspend fun clearScroll(ctx: Context) = withContext(Dispatchers.IO) { store.clearScroll(ctx) }
 
     companion object {
         private const val TAG = "DailyArticle"

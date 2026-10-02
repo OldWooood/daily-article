@@ -4,6 +4,7 @@ import org.jsoup.Jsoup
 import org.jsoup.parser.Parser
 import java.time.LocalDate
 import kotlin.random.Random
+import kotlinx.coroutines.delay
 
 /**
  * 备源：古文岛/原古诗文网（gushiwen.cn，独立域名，无需登录）
@@ -16,25 +17,28 @@ class GushiwenSource : ArticleSource {
 
     override val name = "gushiwen.cn"
 
-    override fun fetchDaily(): Article {
+    override suspend fun fetchDaily(): Article {
         val pool = pool()
         return detail(pool, Math.floorMod(LocalDate.now().dayOfYear, pool.size))
     }
 
-    override fun fetchRandom(): Article {
+    override suspend fun fetchRandom(): Article {
         val pool = pool()
         return detail(pool, Random.nextInt(pool.size))
     }
 
-    /** 诗文列表页的 /shiwenv_xxx.aspx 链接成池（约 10 首，少但稳定）。 */
-    private fun pool(): List<String> {
-        // 单点请求，失败重试 3 次（该站 CDN 偶发 5xx），指数退避
+    /**
+     * 诗文列表页的 /shiwenv_xxx.aspx 链接成池（约 10 首，少但稳定）。
+     * 单点请求，失败重试 3 次（该站 CDN 偶发 5xx），指数退避。
+     * Http 层只补一次重试，这里的退避是唯一的延迟重试，不会相乘。
+     */
+    private suspend fun pool(): List<String> {
         var last: Throwable = ArticleException.NetworkError(LIST)
         repeat(3) { attempt ->
             val result = runCatching { parsePool() }
             result.onSuccess { return it }
             last = result.exceptionOrNull() ?: last
-            if (attempt < 2) Thread.sleep(1000L * (1L shl attempt))
+            if (attempt < 2) delay(1000L * (1L shl attempt))
         }
         throw last
     }

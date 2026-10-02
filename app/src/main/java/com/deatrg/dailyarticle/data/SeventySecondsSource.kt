@@ -12,9 +12,9 @@ class SeventySecondsSource : ArticleSource {
 
     override val name = "60s.viki.moe"
 
-    override fun fetchDaily(): Article = dailyWithFallback()
+    override suspend fun fetchDaily(): Article = dailyWithFallback()
 
-    override fun fetchRandom(): Article {
+    override suspend fun fetchRandom(): Article {
         // 近 365 天随机一天，避免长期只看到最近几条；
         // 单个日期缺数据时换一天重试，而不是让整个源失败。
         var last: Throwable = ArticleException.NetworkError("$name 没有可用日期")

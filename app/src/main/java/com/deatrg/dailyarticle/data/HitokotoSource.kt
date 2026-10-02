@@ -15,9 +15,9 @@ class HitokotoSource(
 
     override val name = "hitokoto.cn"
 
-    override fun fetchDaily(): Article = fetch(pickByDay())
+    override suspend fun fetchDaily(): Article = fetch(pickByDay())
 
-    override fun fetchRandom(): Article = fetch(types.random())
+    override suspend fun fetchRandom(): Article = fetch(types.random())
 
     /** 同一天同一类型，保证稳定。 */
     private fun pickByDay(): String {

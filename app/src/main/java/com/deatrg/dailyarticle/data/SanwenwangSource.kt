@@ -5,7 +5,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.runBlocking
 import org.jsoup.Jsoup
 import java.time.LocalDate
 import kotlin.random.Random
@@ -20,33 +19,47 @@ class SanwenwangSource : ArticleSource {
 
     override val name = "sanwenwang.com"
 
-    override fun fetchDaily(): Article {
+    override suspend fun fetchDaily(): Article {
         val pool = pool()
         return detail(pool, Math.floorMod(LocalDate.now().dayOfYear, pool.size))
     }
 
-    override fun fetchRandom(): Article {
+    override suspend fun fetchRandom(): Article {
         val pool = pool()
         return detail(pool, Random.nextInt(pool.size))
     }
 
-    /** 3 个分类列表各取约 26 篇，凑 70+ 篇候选池；并行抓取，单分类失败记日志但不影响其他。 */
-    private fun pool(): List<String> = runBlocking {
-        coroutineScope {
-            CATEGORIES.map { cat ->
-                async(Dispatchers.IO) {
-                    runCatching {
-                        val doc = Jsoup.parse(Http.get("$BASE$cat", desktopUa = true, timeoutMs = 10_000), BASE)
-                        doc.select("a[href]").mapNotNull { it.attr("abs:href") }
-                            .filter { it.startsWith("$BASE$cat") && it.endsWith(".html") }
-                    }.onFailure {
-                        Log.w(TAG, "列表页失败: $cat", it)
-                    }.getOrDefault(emptyList())
+    /**
+     * 3 个分类列表各取约 26 篇，凑 70+ 篇候选池；并行抓取，单分类失败记日志但不影响其他。
+     * 全部分类都因网络失败时抛原始异常（便于排查），否则抛内容为空。
+     */
+    private suspend fun pool(): List<String> = coroutineScope {
+        var last: Throwable? = null
+        val results = CATEGORIES.map { cat ->
+            async(Dispatchers.IO) {
+                runCatching {
+                    val doc = Jsoup.parse(Http.get("$BASE$cat", desktopUa = true, timeoutMs = 10_000), BASE)
+                    doc.select("a[href]").mapNotNull { it.attr("abs:href") }
+                        .filter { it.startsWith("$BASE$cat") && it.endsWith(".html") }
+                }.onFailure {
+                    Log.w(TAG, "列表页失败: $cat", it)
                 }
-            }.awaitAll().flatten().distinct()
+            }
+        }.awaitAll()
+        val out = mutableListOf<String>()
+        for (r in results) {
+            val list = r.getOrNull()
+            if (list != null) out.addAll(list)
+            else r.exceptionOrNull()?.let { last = it }
         }
-    }.also {
-        if (it.isEmpty()) throw ArticleException.EmptyContent(name)
+        val distinct = out.distinct()
+        if (distinct.isEmpty()) {
+            // 一个都没抓到且全是请求失败：抛原始异常，别报"列表为空"误导排查
+            val e = last
+            if (e != null) throw e
+            throw ArticleException.EmptyContent(name)
+        }
+        distinct
     }
 
     /** 取详情；个别文章下线/改版时顺着池子往下试。 */
