@@ -3,6 +3,7 @@ package com.deatrg.dailyarticle.di
 import android.content.Context
 import com.deatrg.dailyarticle.data.ArticleRepository
 import com.deatrg.dailyarticle.data.ArticleStore
+import com.deatrg.dailyarticle.data.ChinawriterSource
 import com.deatrg.dailyarticle.data.DuwenzhangSource
 import com.deatrg.dailyarticle.data.DushuSource
 import com.deatrg.dailyarticle.data.GushiwenSource
@@ -34,6 +35,7 @@ object AppModule {
 
         val chain = SourceChain(
             listOf(
+                ChinawriterSource(),
                 DushuSource(),
                 SanwenwangSource(),
                 DuwenzhangSource(),
