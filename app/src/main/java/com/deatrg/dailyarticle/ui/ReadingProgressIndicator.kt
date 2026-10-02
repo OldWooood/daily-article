@@ -16,9 +16,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,7 +25,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.deatrg.dailyarticle.data.Article
-import kotlinx.coroutines.flow.first
 
 /**
  * 右侧阅读进度条。
@@ -34,22 +32,31 @@ import kotlinx.coroutines.flow.first
  * `Modifier.verticalScrollbar` 只存在于 foundation 的 desktop 产物，
  * Android 端没有，所以这里按 LazyListState 的真实滚动量自己算。
  *
- * 注意：高度不能用「瞬时可见条目数」算——滚动时条目进出视口，
- * 数量在 N↔N+1 间跳，滑块会跟着突变约 1/N。这里一律用平均条目高度
- * 估算，变化是连续的，没有阶跃。
+ * 旧实现用「首屏平均高度 × 总条目数」估算全文长度，且首屏采样后冻结：
+ * 后面懒组成的高条目（长段落、大图、页脚）进来后总数估算不变，
+ * 滑块会提前贴底且一直粘在下面。
+ * 这里改为像素口径：见过的条目用真实高度，没见过的才按「已见平均」
+ * 估算。新内容组成 / 图片加载撑高后总数自动变大，滑块会从底部退回来。
  */
 @Composable
 fun BoxScope.ReadingProgressIndicator(listState: LazyListState, article: Article) {
-    // 基准条目高度：按文章冻结一次。滚动中可见集合会变化，实时平均仍会跳；
-    // 冻结后滑块高度全程恒定，只有位置在动，和系统滚动条行为一致。
-    var baseAvg by remember(article) { mutableFloatStateOf(0f) }
+    // 每篇文章独立一份：index -> 见过的最大高度。图片异步加载撑高后取最大，
+    // 总数只增不减，滑块不会抖。
+    val knownHeights = remember(article) { mutableStateMapOf<Int, Int>() }
+    // 布局每次变化都记录可见条目的真实高度：尾部内容懒组成后总数估算
+    // 自动更新，这正是旧实现缺的那一块。
     LaunchedEffect(listState, article) {
-        if (baseAvg == 0f) {
-            baseAvg = snapshotFlow { sampleAvg(listState) }.first { it > 0f }
+        snapshotFlowSizes(listState).collect { pairs ->
+            for ((index, size) in pairs) {
+                val prev = knownHeights[index]
+                if (prev == null || size > prev) knownHeights[index] = size
+            }
         }
     }
     // derivedStateOf：滚动时只在进度真的变化时重组，不逐帧重组，省 CPU
-    val progress by remember(listState) { derivedStateOf { measure(listState, baseAvg) } }
+    val progress by remember(listState, article) {
+        derivedStateOf { measure(listState, knownHeights) }
+    }
     // 一屏就能读完，不需要进度条
     if (progress.fraction < 0f) return
 
@@ -85,32 +92,41 @@ fun BoxScope.ReadingProgressIndicator(listState: LazyListState, article: Article
 private data class Progress(val fraction: Float, val thumbRatio: Float)
 
 /**
- * 用平均条目高度估算进度与滑块占比。
- * 可见条目进出视口时，平均值连续变化，不像「可见条目数」那样阶跃；
- * 再叠加按文章冻结基准高度，滑块长度全程恒定，只有位置在动。
- * @param frozenAvg 已冻结的基准高度（>0 时采用，滑块高度全程恒定）。
+ * 像素口径的进度与滑块占比。
+ * - 已滚像素 = 首个可见条目之前所有条目的真实/估算高度之和 + 首项内的偏移。
+ * - 全文总高 = 每个下标的真实高度（见过）或已见平均（没见过）之和。
+ * - 尾部新条目组成、图片撑高时总高变大，已滚不变，fraction 自动从 1 回落，
+ *   滑块离开底部；旧实现总数恒定，所以一直粘底。
  */
-private fun measure(listState: LazyListState, frozenAvg: Float = 0f): Progress {
+private fun measure(listState: LazyListState, known: Map<Int, Int>): Progress {
     val info = listState.layoutInfo
     val total = info.totalItemsCount
     val items = info.visibleItemsInfo
     val viewportH = info.viewportSize.height.toFloat()
     if (total <= 1 || items.isEmpty() || viewportH <= 0f) return Progress(-1f, 0f)
     val liveAvg = items.sumOf { it.size }.toFloat() / items.size
-    val avgH = if (frozenAvg > 0f) frozenAvg else liveAvg
-    if (avgH <= 0f) return Progress(-1f, 0f)
-    val visibleF = viewportH / avgH
-    if (visibleF >= total) return Progress(-1f, 0f)
-    val scrolled = listState.firstVisibleItemIndex + listState.firstVisibleItemScrollOffset / avgH
+    val seenAvg = if (known.isNotEmpty()) known.values.average().toFloat() else 0f
+    val avgH = when {
+        seenAvg > 0f -> seenAvg
+        liveAvg > 0f -> liveAvg
+        else -> return Progress(-1f, 0f)
+    }
+
+    val firstIndex = listState.firstVisibleItemIndex
+    val offset = listState.firstVisibleItemScrollOffset.toFloat()
+    var scrolledPx = offset
+    for (i in 0 until firstIndex) scrolledPx += known[i]?.toFloat() ?: avgH
+    var totalPx = 0f
+    for (i in 0 until total) totalPx += known[i]?.toFloat() ?: avgH
+    if (totalPx <= viewportH) return Progress(-1f, 0f)
     return Progress(
-        fraction = (scrolled / (total - visibleF)).coerceIn(0f, 1f),
-        thumbRatio = (viewportH / (avgH * total)).coerceIn(0f, 1f),
+        fraction = (scrolledPx / (totalPx - viewportH)).coerceIn(0f, 1f),
+        thumbRatio = (viewportH / totalPx).coerceIn(0f, 1f),
     )
 }
 
-/** 当前可见条目的平均高度；未布局好时返回 0。 */
-private fun sampleAvg(listState: LazyListState): Float {
-    val items = listState.layoutInfo.visibleItemsInfo
-    if (items.isEmpty()) return 0f
-    return items.sumOf { it.size }.toFloat() / items.size
-}
+/** 观察可见条目 (index, size) 的快照流；抽出来方便测试与复用。 */
+private fun snapshotFlowSizes(listState: LazyListState) =
+    snapshotFlow {
+        listState.layoutInfo.visibleItemsInfo.map { it.index to it.size }
+    }

@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,24 +74,28 @@ fun DailyScreen(vm: ArticleViewModel = viewModel()) {
                 }
 
                 is UiState.Done -> {
-                    val listState = rememberLazyListState()
-                    val restore by rememberUpdatedState(vm.scroll.collectAsState().value)
-                    val randomLoading by vm.randomLoading.collectAsState()
+                    // 按文章 key 隔离：换文时 LazyListState 全新创建，不会把旧文的
+                    // 滚动位置和已布局信息带到新文，否则进度条首帧会读到脏数据。
+                    key(s.article) {
+                        val listState = rememberLazyListState()
+                        val restore by rememberUpdatedState(vm.scroll.collectAsState().value)
+                        val randomLoading by vm.randomLoading.collectAsState()
 
-                    // 冷启动时回到上次的位置。index 可能因为换了文章而越界，兜底回顶部。
-                    LaunchedEffect(s.article) {
-                        runCatching { listState.scrollToItem(restore.index, restore.offset) }
-                            .onFailure { listState.scrollToItem(0) }
+                        // 冷启动时回到上次的位置。index 可能因为换了文章而越界，兜底回顶部。
+                        LaunchedEffect(s.article) {
+                            runCatching { listState.scrollToItem(restore.index, restore.offset) }
+                                .onFailure { listState.scrollToItem(0) }
+                        }
+
+                        SaveScrollPosition(listState, s.article, vm::onScrolled)
+
+                        ArticleBody(
+                            article = s.article,
+                            listState = listState,
+                            onRandom = vm::loadRandom,
+                            randomLoading = randomLoading,
+                        )
                     }
-
-                    SaveScrollPosition(listState, s.article, vm::onScrolled)
-
-                    ArticleBody(
-                        article = s.article,
-                        listState = listState,
-                        onRandom = vm::loadRandom,
-                        randomLoading = randomLoading,
-                    )
                 }
             }
         }
